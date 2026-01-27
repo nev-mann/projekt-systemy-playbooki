@@ -1,5 +1,6 @@
 ---
 - name: Playbook 1
+  hosts: all
   become: true
   vars:
     disk_1: "/dev/sdb"
