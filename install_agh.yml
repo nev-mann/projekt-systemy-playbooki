@@ -1,0 +1,113 @@
+---
+- name: Playbook 1
+  hosts: agh_servers
+  become: true
+  vars:
+    disk_1: "/dev/sdb"
+    disk_2: "/dev/sdc"
+    vg_name: "adg_vg"
+    lv_name: "adg_lv"
+    mount_point: "/adguardhome"
+    agh_version: "latest"
+    agh_url: "https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
+
+  tasks:
+    # LVM
+    - name: Zainstaluj lvm2 (wymagane do zarządzania LVM)
+      apt:
+        name: lvm2
+        state: present
+        update_cache: yes
+
+    - name: Sprawdź dostępność dysków
+      stat:
+        path: "{{ item }}"
+      register: disk_check
+      loop:
+        - "{{ disk_1 }}"
+        - "{{ disk_2 }}"
+      failed_when: not disk_check.stat.exists
+
+    - name: Utwórz grupę woluminów (VG) na dwóch dyskach
+      community.general.lvg:
+        vg: "{{ vg_name }}"
+        pvs: 
+          - "{{ disk_1 }}"
+          - "{{ disk_2 }}"
+
+    - name: Utwórz wolumin logiczny (LV) w RAID1 (Mirror)
+      command: "lvcreate --type raid1 --mirrors 1 -l 100%FREE -n {{ lv_name }} {{ vg_name }}"
+      args:
+        creates: "/dev/{{ vg_name }}/{{ lv_name }}"
+
+    - name: Sformatuj wolumin systemem plików ext4
+      filesystem:
+        fstype: ext4
+        dev: "/dev/{{ vg_name }}/{{ lv_name }}"
+
+    - name: Utwórz katalog montowania
+      file:
+        path: "{{ mount_point }}"
+        state: directory
+
+    - name: Zamontuj wolumin
+      mount:
+        path: "{{ mount_point }}"
+        src: "/dev/{{ vg_name }}/{{ lv_name }}"
+        fstype: ext4
+        state: mounted
+
+    # AdGuard Home
+    - name: Pobierz i rozpakuj AdGuard Home
+      unarchive:
+        src: "{{ agh_url }}"
+        dest: "{{ mount_point }}"
+        remote_src: yes
+        extra_opts: [--strip-components=1]
+        creates: "{{ mount_point }}/AdGuardHome"
+
+    - name: Zainstaluj usługę AdGuard Home
+      command: "./AdGuardHome -s install"
+      args:
+        chdir: "{{ mount_point }}"
+        creates: "/etc/systemd/system/AdGuardHome.service"
+
+    - name: Uruchom i włącz usługę AdGuard Home
+      systemd:
+        name: AdGuardHome
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    #Firewall
+    - name: Zainstaluj UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Zezwól na SSH (port 22)
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Zezwól na DNS (port 53 TCP/UDP)
+      community.general.ufw:
+        rule: allow
+        port: '53'
+
+    - name: Zezwól na AdGuard Web Interface (port 3000 - instalacja, 80 - panel)
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '3000'
+        - '80'
+
+    - name: Włącz UFW i ustaw domyślną politykę na DENY (blokuj wszystko inne)
+      community.general.ufw:
+        state: enabled
+        policy: deny
+
+    
