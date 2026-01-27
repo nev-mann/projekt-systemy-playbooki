@@ -85,7 +85,7 @@
         var: file_permissions.stdout
 
     - name: Sprawdź opcje montowania systemu plików
-      command: mount | grep {{ mount_point }}
+      shell: mount | grep {{ mount_point }}
       register: mount_options
       changed_when: false
 
