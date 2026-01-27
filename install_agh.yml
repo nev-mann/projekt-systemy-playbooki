@@ -75,8 +75,35 @@
         owner: root
         group: root
 
-    - name: Zainstaluj usługę AdGuard Home
-      command: "{{ mount_point }}/AdGuardHome -s install"
+    - name: Sprawdź uprawnienia i właściciela pliku AdGuardHome
+      command: ls -la {{ mount_point }}/AdGuardHome
+      register: file_permissions
+      changed_when: false
+
+    - name: Wyświetl uprawnienia pliku
+      debug:
+        var: file_permissions.stdout
+
+    - name: Sprawdź opcje montowania systemu plików
+      command: mount | grep {{ mount_point }}
+      register: mount_options
+      changed_when: false
+
+    - name: Wyświetl opcje montowania
+      debug:
+        var: mount_options.stdout
+
+    - name: Skopiuj AdGuardHome do /tmp i zainstaluj stamtąd
+      copy:
+        src: "{{ mount_point }}/AdGuardHome"
+        dest: "/tmp/AdGuardHome"
+        mode: '0755'
+        owner: root
+        group: root
+        remote_src: yes
+
+    - name: Zainstaluj usługę AdGuard Home z /tmp
+      command: "/tmp/AdGuardHome -s install -w {{ mount_point }}"
       args:
         creates: "/etc/systemd/system/AdGuardHome.service"
 
