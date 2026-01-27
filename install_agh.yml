@@ -102,8 +102,28 @@
         group: root
         remote_src: yes
 
-    - name: Zainstaluj usługę AdGuard Home z /tmp
-      command: "/tmp/AdGuardHome -s install -w {{ mount_point }}"
+    - name: Sprawdź czy to problem z SELinux
+      shell: getenforce
+      register: selinux_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Wyświetl status SELinux
+      debug:
+        var: selinux_status.stdout
+      when: selinux_status is succeeded
+
+    - name: Sprawdź czy plik jest wykonywalny przez bash
+      shell: file /tmp/AdGuardHome
+      register: file_type
+      changed_when: false
+
+    - name: Wyświetl typ pliku
+      debug:
+        var: file_type.stdout
+
+    - name: Zainstaluj usługę AdGuard Home przez bash
+      shell: bash -c "/tmp/AdGuardHome -s install -w {{ mount_point }}"
       args:
         creates: "/etc/systemd/system/AdGuardHome.service"
 
