@@ -65,18 +65,17 @@
         src: "{{ agh_url }}"
         dest: "{{ mount_point }}"
         remote_src: yes
-        extra_opts: [--strip-components=1]
-        creates: "{{ mount_point }}/AdGuardHome"
+        creates: "{{ mount_point }}/AdGuardHome/AdGuardHome"
 
     - name: Nadaj uprawnienia wykonywania dla AdGuardHome
       file:
-        path: "{{ mount_point }}/AdGuardHome"
+        path: "{{ mount_point }}/AdGuardHome/AdGuardHome"
         mode: '0755'
         owner: root
         group: root
 
     - name: Sprawdź uprawnienia i właściciela pliku AdGuardHome
-      command: ls -la {{ mount_point }}/AdGuardHome
+      command: ls -la {{ mount_point }}/AdGuardHome/AdGuardHome
       register: file_permissions
       changed_when: false
 
@@ -114,7 +113,7 @@
         var: agh_structure.stdout
 
     - name: Sprawdź czy plik jest wykonywalny przez bash
-      shell: file {{ mount_point }}/AdGuardHome
+      shell: file {{ mount_point }}/AdGuardHome/AdGuardHome
       register: file_type
       changed_when: false
 
@@ -122,11 +121,8 @@
       debug:
         var: file_type.stdout
 
-    - name: Zainstaluj usługę AdGuard Home bezpośrednio z oryginalnej lokalizacji
-      shell: bash -c "{{ mount_point }}/AdGuardHome -s install -w {{ mount_point }}"
-      args:
-        creates: "/etc/systemd/system/AdGuardHome.service"
-      shell: bash -c "/tmp/AdGuardHome -s install -w {{ mount_point }}"
+    - name: Zainstaluj usługę AdGuard Home
+      shell: "{{ mount_point }}/AdGuardHome/AdGuardHome -s install"
       args:
         creates: "/etc/systemd/system/AdGuardHome.service"
 
