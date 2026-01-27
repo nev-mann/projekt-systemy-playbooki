@@ -2,6 +2,8 @@
 - name: Playbook 1
   hosts: all
   become: true
+  become_method: sudo
+  become_user: root
   vars:
     disk_1: "/dev/sdb"
     disk_2: "/dev/sdc"
@@ -13,6 +15,10 @@
 
   tasks:
     # LVM
+    - name: Czekaj na zwolnienie apt lock
+      shell: while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 1; done;
+      changed_when: false
+
     - name: Zainstaluj lvm2 (wymagane do zarządzania LVM)
       apt:
         name: lvm2
