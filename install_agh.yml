@@ -93,15 +93,6 @@
       debug:
         var: mount_options.stdout
 
-    - name: Skopiuj AdGuardHome do /tmp i zainstaluj stamtąd
-      copy:
-        src: "{{ mount_point }}/AdGuardHome"
-        dest: "/tmp/AdGuardHome"
-        mode: '0755'
-        owner: root
-        group: root
-        remote_src: yes
-
     - name: Sprawdź czy to problem z SELinux
       shell: getenforce
       register: selinux_status
@@ -113,8 +104,17 @@
         var: selinux_status.stdout
       when: selinux_status is succeeded
 
+    - name: Sprawdź strukturę katalogu AdGuardHome
+      shell: ls -la {{ mount_point }}/
+      register: agh_structure
+      changed_when: false
+
+    - name: Wyświetl strukturę katalogu
+      debug:
+        var: agh_structure.stdout
+
     - name: Sprawdź czy plik jest wykonywalny przez bash
-      shell: file /tmp/AdGuardHome
+      shell: file {{ mount_point }}/AdGuardHome
       register: file_type
       changed_when: false
 
@@ -122,7 +122,10 @@
       debug:
         var: file_type.stdout
 
-    - name: Zainstaluj usługę AdGuard Home przez bash
+    - name: Zainstaluj usługę AdGuard Home bezpośrednio z oryginalnej lokalizacji
+      shell: bash -c "{{ mount_point }}/AdGuardHome -s install -w {{ mount_point }}"
+      args:
+        creates: "/etc/systemd/system/AdGuardHome.service"
       shell: bash -c "/tmp/AdGuardHome -s install -w {{ mount_point }}"
       args:
         creates: "/etc/systemd/system/AdGuardHome.service"
