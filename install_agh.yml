@@ -15,10 +15,6 @@
 
   tasks:
     # LVM
-    - name: Czekaj na zwolnienie apt lock
-      shell: while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 1; done;
-      changed_when: false
-
     - name: Zainstaluj lvm2 (wymagane do zarządzania LVM)
       apt:
         name: lvm2
@@ -71,6 +67,11 @@
         remote_src: yes
         extra_opts: [--strip-components=1]
         creates: "{{ mount_point }}/AdGuardHome"
+
+    - name: Nadaj uprawnienia wykonywania dla AdGuardHome
+      file:
+        path: "{{ mount_point }}/AdGuardHome"
+        mode: '0755'
 
     - name: Zainstaluj usługę AdGuard Home
       command: "./AdGuardHome -s install"
