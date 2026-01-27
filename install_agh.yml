@@ -1,12 +1,11 @@
 ---
 - name: Playbook 1
-  hosts: agh_servers
   become: true
   vars:
     disk_1: "/dev/sdb"
     disk_2: "/dev/sdc"
-    vg_name: "adg_vg"
-    lv_name: "adg_lv"
+    vg_name: "agh_vg"
+    lv_name: "agh_lv"
     mount_point: "/adguardhome"
     agh_version: "latest"
     agh_url: "https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
