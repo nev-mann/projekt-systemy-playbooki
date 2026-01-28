@@ -65,6 +65,13 @@
             format: gz
           register: archive_created
 
+        - name: Utworz katalog docelowy na serwerze Semaphore
+          file:
+            path: "{{ backup_destination_path }}"
+            state: directory
+            mode: '0755'
+          delegate_to: localhost
+          become: false
 
         - name: Przeslij kopie zapasowa do serwera Semaphore
           synchronize:
