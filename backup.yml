@@ -9,9 +9,9 @@
   become_method: sudo
   become_user: root
   vars:
-    adguard_data_path: /adGuardHome/AdGuardHome
-    adguard_config_path: /adGuardHome/AdGuardHome/AdGuardHome.yaml
-    adguard_work_dir: /adGuardHome/AdGuardHome/data
+    adguard_data_path: /adguardhome/AdGuardHome
+    adguard_config_path: /adguardhome/AdGuardHome/AdGuardHome.yaml
+    adguard_work_dir: /adguardhome/AdGuardHome/data
     backup_destination_host: AGHLinux
     backup_destination_path: /backup/adguard
     backup_retention_days: 30
