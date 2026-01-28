@@ -12,7 +12,7 @@
     adguard_data_path: /adguardhome/AdGuardHome
     adguard_config_path: /adguardhome/AdGuardHome/AdGuardHome.yaml
     adguard_work_dir: /adguardhome/AdGuardHome/data
-    backup_destination_host: AGHLinux
+    backup_destination_host: localhost
     backup_destination_path: /backup/adguard
     backup_retention_days: 30
     notification_email: admin@example.com
@@ -66,14 +66,12 @@
           register: archive_created
 
 
-        - name: Przeslij kopie zapasowa do serwera docelowego
+        - name: Przeslij kopie zapasowa do serwera Semaphore
           synchronize:
-            src: "{{ item }}"
+            src: /tmp/adguard_backup_{{ timestamp }}.tar.gz
             dest: "{{ backup_destination_path }}/"
-            mode: push
-          delegate_to: "{{ backup_destination_host }}"
-          loop:
-            - /tmp/adguard_backup_{{ timestamp }}.tar.gz
+            mode: pull
+          delegate_to: localhost
           register: backup_transfer
 
         - name: Usun stare kopie zapasowe (retencja)
