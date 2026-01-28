@@ -65,14 +65,6 @@
             format: gz
           register: archive_created
 
-        - name: Utworz katalog docelowy na serwerze Semaphore
-          file:
-            path: "{{ backup_destination_path }}"
-            state: directory
-            mode: '0755'
-          delegate_to: localhost
-          become: false
-
         - name: Przeslij kopie zapasowa do serwera Semaphore
           synchronize:
             src: /tmp/adguard_backup_{{ timestamp }}.tar.gz
@@ -126,19 +118,3 @@
             path: /var/log/adguard_backup.log
             line: "{{ ansible_date_time.iso8601 }} - FAILED - Backup failed: {{ ansible_failed_result.msg | default('Unknown error') }}"
             create: yes
-
-        - name: Wyslij powiadomienie email o bledzie
-          mail:
-            host: localhost
-            port: 25
-            to: "{{ notification_email }}"
-            subject: "[ALERT] AdGuard Home Backup Failed - {{ inventory_hostname }}"
-            body: |
-              Kopia zapasowa AdGuard Home nie powiodla sie!
-              
-              Serwer: {{ inventory_hostname }}
-              Data: {{ ansible_date_time.iso8601 }}
-              Blad: {{ ansible_failed_result.msg | default('Unknown error') }}
-              
-              Prosze sprawdzic logi: /var/log/adguard_backup.log
-          ignore_errors: yes
