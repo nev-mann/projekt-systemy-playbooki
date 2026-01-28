@@ -1,0 +1,56 @@
+---
+- name: Playbook 2 - Aktualizacja Systemu Operacyjnego
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    notification_email: "admin@example.com"
+
+  handlers:
+    - name: Reboot if required
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        msg: "Reboot initiated by Ansible after system update"
+      when: reboot_required.stat.exists | default(false)
+
+  tasks:
+    - name: Update package cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Upgrade all packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        upgrade: safe
+        autoremove: true
+        autoclean: true
+      register: apt_upgrade_result
+      when: ansible_os_family == "Debian"
+
+    - name: Check if reboot is required (Debian/Ubuntu)
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      when: ansible_os_family == "Debian"
+
+    - name: Display update summary
+      ansible.builtin.debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Update completed successfully
+          Reboot required: {{ reboot_required.stat.exists | default(false) or (reboot_required_rhel.rc | default(0) == 1) }}
+
+    - name: Log update status to file
+      ansible.builtin.lineinfile:
+        path: /var/log/ansible-updates.log
+        line: "{{ ansible_date_time.iso8601 }} - Update completed successfully on {{ inventory_hostname }}"
+        create: true
+        mode: '0644'
+
+  rescue:
+    - name: Fail with error message
+      ansible.builtin.fail:
+        msg: "System update failed on {{ inventory_hostname }}. Check logs for details."

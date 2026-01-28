@@ -1,0 +1,144 @@
+---
+# Playbook 3: Kopia zapasowa AdGuard Home
+# Autor: GitHub Copilot
+# Opis: Automatyczna kopia zapasowa danych AdGuard Home z powiadomieniami o błędach
+
+- name: Backup AdGuard Home
+  hosts: adguard_servers
+  become: yes
+  vars:
+    adguard_data_path: /opt/AdGuardHome
+    adguard_config_path: /opt/AdGuardHome/AdGuardHome.yaml
+    adguard_work_dir: /opt/AdGuardHome/data
+    backup_destination_host: AGHLinux
+    backup_destination_path: /backup/adguard
+    backup_retention_days: 30
+    notification_email: admin@example.com
+    timestamp: "{{ ansible_date_time.date }}_{{ ansible_date_time.hour }}{{ ansible_date_time.minute }}"
+
+  tasks:
+    - name: Utworz katalog tymczasowy na kopie zapasowa
+      file:
+        path: /tmp/adguard_backup_{{ timestamp }}
+        state: directory
+        mode: '0700'
+
+    - name: Zatrzymaj AdGuard Home przed kopia (opcjonalne - dla spojnosci danych)
+      systemd:
+        name: AdGuardHome
+        state: stopped
+      register: adguard_stopped
+      ignore_errors: yes
+
+    - name: Skopiuj pliki konfiguracyjne AdGuard Home
+      copy:
+        src: "{{ item }}"
+        dest: /tmp/adguard_backup_{{ timestamp }}/
+        remote_src: yes
+        mode: preserve
+      loop:
+        - "{{ adguard_config_path }}"
+      register: config_backup
+
+    - name: Skopiuj katalog danych AdGuard Home
+      synchronize:
+        src: "{{ adguard_work_dir }}/"
+        dest: /tmp/adguard_backup_{{ timestamp }}/data/
+        mode: pull
+      delegate_to: "{{ inventory_hostname }}"
+      register: data_backup
+
+    - name: Uruchom AdGuard Home po utworzeniu kopii
+      systemd:
+        name: AdGuardHome
+        state: started
+      when: adguard_stopped is succeeded
+
+    - name: Utworz archiwum kopii zapasowej
+      archive:
+        path: /tmp/adguard_backup_{{ timestamp }}
+        dest: /tmp/adguard_backup_{{ timestamp }}.tar.gz
+        format: gz
+      register: archive_created
+
+    - name: Oblicz sume kontrolna archiwum
+      stat:
+        path: /tmp/adguard_backup_{{ timestamp }}.tar.gz
+        checksum_algorithm: sha256
+      register: backup_checksum
+
+    - name: Zapisz sume kontrolna do pliku
+      copy:
+        content: "{{ backup_checksum.stat.checksum }}  adguard_backup_{{ timestamp }}.tar.gz\n"
+        dest: /tmp/adguard_backup_{{ timestamp }}.sha256
+
+    - name: Przeslij kopie zapasowa do serwera docelowego
+      synchronize:
+        src: "{{ item }}"
+        dest: "{{ backup_destination_path }}/"
+        mode: push
+      delegate_to: "{{ backup_destination_host }}"
+      loop:
+        - /tmp/adguard_backup_{{ timestamp }}.tar.gz
+        - /tmp/adguard_backup_{{ timestamp }}.sha256
+      register: backup_transfer
+
+    - name: Usun stare kopie zapasowe (retencja)
+      find:
+        paths: "{{ backup_destination_path }}"
+        patterns: "adguard_backup_*.tar.gz"
+        age: "{{ backup_retention_days }}d"
+      register: old_backups
+      delegate_to: "{{ backup_destination_host }}"
+
+    - name: Usun znalezione stare kopie
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      delegate_to: "{{ backup_destination_host }}"
+      when: old_backups.matched > 0
+
+    - name: Wyczysc pliki tymczasowe
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/adguard_backup_{{ timestamp }}
+        - /tmp/adguard_backup_{{ timestamp }}.tar.gz
+        - /tmp/adguard_backup_{{ timestamp }}.sha256
+
+    - name: Zapisz log sukcesu
+      lineinfile:
+        path: /var/log/adguard_backup.log
+        line: "{{ ansible_date_time.iso8601 }} - SUCCESS - Backup completed: adguard_backup_{{ timestamp }}.tar.gz ({{ backup_checksum.stat.checksum }})"
+        create: yes
+
+  rescue:
+    - name: Uruchom AdGuard Home w przypadku bledu
+      systemd:
+        name: AdGuardHome
+        state: started
+      ignore_errors: yes
+
+    - name: Zapisz log bledu
+      lineinfile:
+        path: /var/log/adguard_backup.log
+        line: "{{ ansible_date_time.iso8601 }} - FAILED - Backup failed: {{ ansible_failed_result.msg | default('Unknown error') }}"
+        create: yes
+
+    - name: Wyslij powiadomienie email o bledzie
+      mail:
+        host: localhost
+        port: 25
+        to: "{{ notification_email }}"
+        subject: "[ALERT] AdGuard Home Backup Failed - {{ inventory_hostname }}"
+        body: |
+          Kopia zapasowa AdGuard Home nie powiodla sie!
+          
+          Serwer: {{ inventory_hostname }}
+          Data: {{ ansible_date_time.iso8601 }}
+          Blad: {{ ansible_failed_result.msg | default('Unknown error') }}
+          
+          Prosze sprawdzic logi: /var/log/adguard_backup.log
+      ignore_errors: yes
