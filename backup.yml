@@ -72,6 +72,7 @@
             dest: "{{ backup_destination_path }}/"
             mode: pull
           delegate_to: localhost
+          become: false
           register: backup_transfer
 
         - name: Usun stare kopie zapasowe (retencja)
@@ -81,6 +82,7 @@
             age: "{{ backup_retention_days }}d"
           register: old_backups
           delegate_to: "{{ backup_destination_host }}"
+          become: false
 
         - name: Usun znalezione stare kopie
           file:
@@ -88,6 +90,7 @@
             state: absent
           loop: "{{ old_backups.files }}"
           delegate_to: "{{ backup_destination_host }}"
+          become: false
           when: old_backups.matched > 0
 
         - name: Wyczysc pliki tymczasowe
