@@ -4,8 +4,10 @@
 # Opis: Automatyczna kopia zapasowa danych AdGuard Home z powiadomieniami o błędach
 
 - name: Backup AdGuard Home
-  hosts: adguard_servers
-  become: yes
+  hosts: all
+  become: true
+  become_method: sudo
+  become_user: root
   vars:
     adguard_data_path: /opt/AdGuardHome
     adguard_config_path: /opt/AdGuardHome/AdGuardHome.yaml
