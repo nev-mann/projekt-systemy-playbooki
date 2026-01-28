@@ -69,7 +69,7 @@
           file:
             path: "{{ backup_destination_path }}"
             state: directory
-            mode: '0755'
+            mode: '0777'
           delegate_to: localhost
           become: false
 
