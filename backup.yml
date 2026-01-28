@@ -13,7 +13,7 @@
     adguard_config_path: /adguardhome/AdGuardHome/AdGuardHome.yaml
     adguard_work_dir: /adguardhome/AdGuardHome/data
     backup_destination_host: localhost
-    backup_destination_path: /backup/adguard
+    backup_destination_path: /home/neumann/backup/adguard
     backup_retention_days: 30
     notification_email: admin@example.com
     timestamp: "{{ ansible_date_time.date }}_{{ ansible_date_time.hour }}{{ ansible_date_time.minute }}"
