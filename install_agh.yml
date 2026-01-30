@@ -1,5 +1,5 @@
 ---
-- name: Playbook 1
+- name: "Playbook 1: Instalacja i Konfiguracja AdGuard Home"
   hosts: all
   become: true
   become_method: sudo
@@ -14,14 +14,13 @@
     agh_url: "https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
 
   tasks:
-    # LVM
-    - name: Zainstaluj lvm2 (wymagane do zarządzania LVM)
+    - name: Instalacja lvm2
       apt:
         name: lvm2
         state: present
         update_cache: yes
 
-    - name: Sprawdź dostępność dysków
+    - name: Dostępność dysków
       stat:
         path: "{{ item }}"
       register: disk_check
@@ -59,8 +58,8 @@
         fstype: ext4
         state: mounted
 
-    # AdGuard Home
-    - name: Pobierz i rozpakuj AdGuard Home
+    # AdGuardHome
+    - name: Pobierz i rozpakuj AdGuardHome
       unarchive:
         src: "{{ agh_url }}"
         dest: "{{ mount_point }}"
@@ -74,59 +73,12 @@
         owner: root
         group: root
 
-    - name: Sprawdź uprawnienia i właściciela pliku AdGuardHome
-      command: ls -la {{ mount_point }}/AdGuardHome/AdGuardHome
-      register: file_permissions
-      changed_when: false
-
-    - name: Wyświetl uprawnienia pliku
-      debug:
-        var: file_permissions.stdout
-
-    - name: Sprawdź opcje montowania systemu plików
-      shell: mount | grep {{ mount_point }}
-      register: mount_options
-      changed_when: false
-
-    - name: Wyświetl opcje montowania
-      debug:
-        var: mount_options.stdout
-
-    - name: Sprawdź czy to problem z SELinux
-      shell: getenforce
-      register: selinux_status
-      changed_when: false
-      ignore_errors: yes
-
-    - name: Wyświetl status SELinux
-      debug:
-        var: selinux_status.stdout
-      when: selinux_status is succeeded
-
-    - name: Sprawdź strukturę katalogu AdGuardHome
-      shell: ls -la {{ mount_point }}/
-      register: agh_structure
-      changed_when: false
-
-    - name: Wyświetl strukturę katalogu
-      debug:
-        var: agh_structure.stdout
-
-    - name: Sprawdź czy plik jest wykonywalny przez bash
-      shell: file {{ mount_point }}/AdGuardHome/AdGuardHome
-      register: file_type
-      changed_when: false
-
-    - name: Wyświetl typ pliku
-      debug:
-        var: file_type.stdout
-
-    - name: Zainstaluj usługę AdGuard Home
+    - name: Zainstaluj usługę AdGuardHome
       shell: "{{ mount_point }}/AdGuardHome/AdGuardHome -s install"
       args:
         creates: "/etc/systemd/system/AdGuardHome.service"
 
-    - name: Uruchom i włącz usługę AdGuard Home
+    - name: Uruchom i włącz usługę AdGuardHome
       systemd:
         name: AdGuardHome
         state: started

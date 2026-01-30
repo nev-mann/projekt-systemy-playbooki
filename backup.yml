@@ -1,9 +1,5 @@
 ---
-# Playbook 3: Kopia zapasowa AdGuard Home
-# Autor: GitHub Copilot
-# Opis: Automatyczna kopia zapasowa danych AdGuard Home z powiadomieniami o błędach
-
-- name: Backup AdGuard Home
+- name: "Playbook 3: Kopia zapasowa AdGuard Home"
   hosts: all
   become: true
   become_method: sudo
@@ -14,8 +10,6 @@
     adguard_work_dir: /adguardhome/AdGuardHome/data
     backup_destination_host: localhost
     backup_destination_path: /home/semaphore/backup/adguard
-    backup_retention_days: 30
-    notification_email: admin@example.com
     timestamp: "{{ ansible_date_time.date }}_{{ ansible_date_time.hour }}{{ ansible_date_time.minute }}"
 
   tasks:
@@ -27,7 +21,7 @@
             state: directory
             mode: '0700'
 
-        - name: Zatrzymaj AdGuard Home przed kopia (opcjonalne - dla spojnosci danych)
+        - name: Zatrzymaj AdGuard Home
           systemd:
             name: AdGuardHome
             state: stopped
@@ -82,24 +76,6 @@
           become: false
           register: backup_transfer
 
-        - name: Usun stare kopie zapasowe (retencja)
-          find:
-            paths: "{{ backup_destination_path }}"
-            patterns: "adguard_backup_*.tar.gz"
-            age: "{{ backup_retention_days }}d"
-          register: old_backups
-          delegate_to: "{{ backup_destination_host }}"
-          become: false
-
-        - name: Usun znalezione stare kopie
-          file:
-            path: "{{ item.path }}"
-            state: absent
-          loop: "{{ old_backups.files }}"
-          delegate_to: "{{ backup_destination_host }}"
-          become: false
-          when: old_backups.matched > 0
-
         - name: Wyczysc pliki tymczasowe
           file:
             path: "{{ item }}"
@@ -108,21 +84,9 @@
             - /tmp/adguard_backup_{{ timestamp }}
             - /tmp/adguard_backup_{{ timestamp }}.tar.gz
 
-        - name: Zapisz log sukcesu
-          lineinfile:
-            path: /var/log/adguard_backup.log
-            line: "{{ ansible_date_time.iso8601 }} - SUCCESS - Backup completed: adguard_backup_{{ timestamp }}.tar.gz"
-            create: yes
-
       rescue:
         - name: Uruchom AdGuard Home w przypadku bledu
           systemd:
             name: AdGuardHome
             state: started
           ignore_errors: yes
-
-        - name: Zapisz log bledu
-          lineinfile:
-            path: /var/log/adguard_backup.log
-            line: "{{ ansible_date_time.iso8601 }} - FAILED - Backup failed: {{ ansible_failed_result.msg | default('Unknown error') }}"
-            create: yes
