@@ -1,0 +1,260 @@
+---
+- name: "Playbook 4: Konfiguracja Puli Dyskowej i Udziału Sieciowego"
+  hosts: all
+  gather_facts: true
+  vars:
+    storage_pool_name: "DataPool"
+    virtual_disk_name: "DataDisk"
+    volume_letter: "F"
+    group_name: "Kierownicy_Neumann"
+    share_name: "Projekty_Neumann"
+    share_path: "F:\\Projekty"
+    users:
+      - name: "Marek Romanek"
+        username: "mromanek"
+        password: "Cde34rfv!"
+      - name: "Jacek Gula"
+        username: "jgula"
+        password: "Bgt56yhn!"
+
+  tasks:
+    # ==================== PULA DYSKOWA I TIERING ====================
+    - name: Utworzenie puli dyskowej z wszystkimi dostępnymi dyskami
+      ansible.windows.win_powershell:
+        script: |
+          $poolName = "{{ storage_pool_name }}"
+          $existingPool = Get-StoragePool -FriendlyName $poolName -ErrorAction SilentlyContinue
+          
+          if ($existingPool) {
+              Write-Output "Storage pool '$poolName' already exists"
+              $Ansible.Changed = $false
+          } else {
+              $subsystem = Get-StorageSubSystem | Where-Object { $_.FriendlyName -like "*Windows*" }
+              $physicalDisks = Get-PhysicalDisk -CanPool $true
+              
+              if ($physicalDisks.Count -lt 1) {
+                  throw "No physical disks available for pooling"
+              }
+              
+              New-StoragePool -FriendlyName $poolName `
+                  -StorageSubSystemFriendlyName $subsystem.FriendlyName `
+                  -PhysicalDisks $physicalDisks `
+                  -ResiliencySettingNameDefault Mirror
+              
+              Write-Output "Storage pool '$poolName' created successfully"
+              $Ansible.Changed = $true
+          }
+      register: storage_pool_result
+
+    - name: Konfiguracja Storage Tiers (SSD jako szybsza warstwa)
+      ansible.windows.win_powershell:
+        script: |
+          $poolName = "{{ storage_pool_name }}"
+          $pool = Get-StoragePool -FriendlyName $poolName -ErrorAction SilentlyContinue
+          
+          if (-not $pool) {
+              throw "Storage pool '$poolName' not found"
+          }
+          
+          $ssdTier = Get-StorageTier -FriendlyName "${poolName}_SSD" -ErrorAction SilentlyContinue
+          $hddTier = Get-StorageTier -FriendlyName "${poolName}_HDD" -ErrorAction SilentlyContinue
+          
+          $tiersCreated = $false
+          
+          $ssdDisks = Get-PhysicalDisk -StoragePool $pool | Where-Object { $_.MediaType -eq 'SSD' }
+          $hddDisks = Get-PhysicalDisk -StoragePool $pool | Where-Object { $_.MediaType -eq 'HDD' -or $_.MediaType -eq 'Unspecified' }
+          
+          if ($ssdDisks -and -not $ssdTier) {
+              New-StorageTier -StoragePoolFriendlyName $poolName -FriendlyName "${poolName}_SSD" -MediaType SSD
+              $tiersCreated = $true
+          }
+          
+          if ($hddDisks -and -not $hddTier) {
+              New-StorageTier -StoragePoolFriendlyName $poolName -FriendlyName "${poolName}_HDD" -MediaType HDD
+              $tiersCreated = $true
+          }
+          
+          $Ansible.Changed = $tiersCreated
+      register: storage_tiers_result
+      ignore_errors: true
+
+    # ==================== WIRTUALNY DYSK I SYSTEM PLIKÓW ====================
+    - name: Utworzenie wirtualnego dysku z dublowaniem (mirroring)
+      ansible.windows.win_powershell:
+        script: |
+          $poolName = "{{ storage_pool_name }}"
+          $vdiskName = "{{ virtual_disk_name }}"
+          
+          $existingVDisk = Get-VirtualDisk -FriendlyName $vdiskName -ErrorAction SilentlyContinue
+          
+          if ($existingVDisk) {
+              Write-Output "Virtual disk '$vdiskName' already exists"
+              $Ansible.Changed = $false
+          } else {
+              $pool = Get-StoragePool -FriendlyName $poolName
+              
+              New-VirtualDisk -StoragePoolFriendlyName $poolName `
+                  -FriendlyName $vdiskName `
+                  -ResiliencySettingName Mirror `
+                  -UseMaximumSize `
+                  -ProvisioningType Fixed
+              
+              Write-Output "Virtual disk '$vdiskName' created successfully"
+              $Ansible.Changed = $true
+          }
+      register: virtual_disk_result
+
+    - name: Inicjalizacja dysku wirtualnego
+      ansible.windows.win_powershell:
+        script: |
+          $vdiskName = "{{ virtual_disk_name }}"
+          $vdisk = Get-VirtualDisk -FriendlyName $vdiskName
+          $disk = $vdisk | Get-Disk
+          
+          if ($disk.PartitionStyle -eq 'RAW') {
+              $disk | Initialize-Disk -PartitionStyle GPT
+              $Ansible.Changed = $true
+          } else {
+              $Ansible.Changed = $false
+          }
+
+    - name: Utworzenie partycji i formatowanie jako ReFS z literą F
+      ansible.windows.win_powershell:
+        script: |
+          $vdiskName = "{{ virtual_disk_name }}"
+          $driveLetter = "{{ volume_letter }}"
+          
+          $existingVolume = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
+          
+          if ($existingVolume) {
+              Write-Output "Volume $driveLetter already exists"
+              $Ansible.Changed = $false
+          } else {
+              $vdisk = Get-VirtualDisk -FriendlyName $vdiskName
+              $disk = $vdisk | Get-Disk
+              
+              $partition = $disk | New-Partition -UseMaximumSize -DriveLetter $driveLetter
+              Format-Volume -DriveLetter $driveLetter -FileSystem ReFS -NewFileSystemLabel "Data" -Confirm:$false
+              
+              Write-Output "Volume $driveLetter formatted with ReFS"
+              $Ansible.Changed = $true
+          }
+      register: format_result
+
+    # ==================== ZARZĄDZANIE UŻYTKOWNIKAMI ====================
+    - name: Utworzenie użytkowników lokalnych
+      ansible.windows.win_user:
+        name: "{{ item.username }}"
+        fullname: "{{ item.name }}"
+        password: "{{ item.password }}"
+        password_never_expires: true
+        state: present
+        groups:
+          - Users
+      loop: "{{ users }}"
+      no_log: true
+
+    - name: Utworzenie grupy zabezpieczeń Kierownicy
+      ansible.windows.win_group:
+        name: "{{ group_name }}"
+        description: "Grupa kierowników - Neumann"
+        state: present
+
+    - name: Dodanie użytkowników do grupy Kierownicy
+      ansible.windows.win_group_membership:
+        name: "{{ group_name }}"
+        members:
+          - "{{ users[0].username }}"
+          - "{{ users[1].username }}"
+        state: present
+
+    # ==================== KATALOG I UDZIAŁ SIECIOWY ====================
+    - name: Utworzenie katalogu Projekty na dysku F
+      ansible.windows.win_file:
+        path: "{{ share_path }}"
+        state: directory
+
+    - name: Konfiguracja uprawnień NTFS dla katalogu Projekty
+      ansible.windows.win_acl:
+        path: "{{ share_path }}"
+        user: "{{ group_name }}"
+        rights: FullControl
+        type: allow
+        state: present
+        inherit: ContainerInherit, ObjectInherit
+        propagation: None
+
+    - name: Usunięcie domyślnych uprawnień Users z katalogu
+      ansible.windows.win_acl:
+        path: "{{ share_path }}"
+        user: BUILTIN\Users
+        rights: ReadAndExecute
+        type: allow
+        state: absent
+      ignore_errors: true
+
+    - name: Utworzenie udziału sieciowego Projekty
+      ansible.windows.win_share:
+        name: "{{ share_name }}"
+        path: "{{ share_path }}"
+        state: present
+        full: 
+          - Administrators
+          - "{{ group_name }}"
+        deny:
+          - Everyone
+        description: "Udział sieciowy dla projektów - Neumann"
+
+    # ==================== INSTALACJA APLIKACJI ====================
+    - name: Sprawdzenie czy Chocolatey jest zainstalowane
+      ansible.windows.win_powershell:
+        script: |
+          $choco = Get-Command choco -ErrorAction SilentlyContinue
+          if (-not $choco) {
+              Set-ExecutionPolicy Bypass -Scope Process -Force
+              [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+              Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+              $Ansible.Changed = $true
+          } else {
+              $Ansible.Changed = $false
+          }
+
+    - name: Instalacja 7-Zip
+      chocolatey.chocolatey.win_chocolatey:
+        name: 7zip
+        state: present
+
+    - name: Instalacja BIND (dig)
+      chocolatey.chocolatey.win_chocolatey:
+        name: bind-toolsonly
+        state: present
+
+    - name: Instalacja Firefox
+      chocolatey.chocolatey.win_chocolatey:
+        name: firefox
+        state: present
+
+    # ==================== WPIS DO REJESTRU ====================
+    - name: Dodanie wpisu rejestru zapobiegającego usuwaniu drukarek przez użytkowników
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers
+        name: PreventDeletion
+        data: 1
+        type: dword
+        state: present
+
+    - name: Konfiguracja Point and Print Restrictions dla nie-administratorów
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint
+        name: NoWarningNoElevationOnInstall
+        data: 0
+        type: dword
+        state: present
+
+    - name: Wyłączenie możliwości usuwania drukarek w ustawieniach użytkownika
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer
+        name: NoDeletePrinter
+        data: 1
+        type: dword
+        state: present
