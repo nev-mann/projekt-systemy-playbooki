@@ -29,19 +29,19 @@
         - "{{ disk_2 }}"
       failed_when: not disk_check.stat.exists
 
-    - name: Utwórz grupę woluminów (VG) na dwóch dyskach
+    - name: Utwórz grupę woluminów
       community.general.lvg:
         vg: "{{ vg_name }}"
         pvs: 
           - "{{ disk_1 }}"
           - "{{ disk_2 }}"
 
-    - name: Utwórz wolumin logiczny (LV) w RAID1 (Mirror)
+    - name: Utwórz wolumin logiczny
       command: "lvcreate --type raid1 --mirrors 1 -l 100%FREE -n {{ lv_name }} {{ vg_name }}"
       args:
         creates: "/dev/{{ vg_name }}/{{ lv_name }}"
 
-    - name: Sformatuj wolumin systemem plików ext4
+    - name: Sformatuj wolumin
       filesystem:
         fstype: ext4
         dev: "/dev/{{ vg_name }}/{{ lv_name }}"
@@ -85,24 +85,24 @@
         enabled: yes
         daemon_reload: yes
 
-    #Firewall
+    # Firewall
     - name: Zainstaluj UFW
       apt:
         name: ufw
         state: present
 
-    - name: Zezwól na SSH (port 22)
+    - name: Zezwól na SSH
       community.general.ufw:
         rule: allow
         port: '22'
         proto: tcp
 
-    - name: Zezwól na DNS (port 53 TCP/UDP)
+    - name: Zezwól na DNS
       community.general.ufw:
         rule: allow
         port: '53'
 
-    - name: Zezwól na AdGuard Web Interface (port 3000 - instalacja, 80 - panel)
+    - name: Zezwól na AdGuard Web Interface
       community.general.ufw:
         rule: allow
         port: "{{ item }}"
@@ -111,7 +111,7 @@
         - '3000'
         - '80'
 
-    - name: Włącz UFW i ustaw domyślną politykę na DENY (blokuj wszystko inne)
+    - name: Konfiguracja UFW
       community.general.ufw:
         state: enabled
         policy: deny

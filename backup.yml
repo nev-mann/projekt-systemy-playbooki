@@ -15,7 +15,7 @@
   tasks:
     - name: Backup AdGuard Home block
       block:
-        - name: Utworz katalog tymczasowy na kopie zapasowa
+        - name: Utwórz katalog tymczasowy na kopię zapasową
           file:
             path: /tmp/adguard_backup_{{ timestamp }}
             state: directory
@@ -52,14 +52,14 @@
             state: started
           when: adguard_stopped is succeeded
 
-        - name: Utworz archiwum kopii zapasowej
+        - name: Utwórz archiwum kopii zapasowej
           archive:
             path: /tmp/adguard_backup_{{ timestamp }}
             dest: /tmp/adguard_backup_{{ timestamp }}.tar.gz
             format: gz
           register: archive_created
 
-        - name: Utworz katalog docelowy na serwerze Semaphore
+        - name: Utwórz katalog docelowy na serwerze Semaphore
           file:
             path: "{{ backup_destination_path }}"
             state: directory
@@ -67,7 +67,7 @@
           delegate_to: localhost
           become: false
 
-        - name: Przeslij kopie zapasowa do serwera Semaphore
+        - name: Prześlij kopię zapasową do serwera Semaphore
           synchronize:
             src: /tmp/adguard_backup_{{ timestamp }}.tar.gz
             dest: "{{ backup_destination_path }}/"
@@ -76,7 +76,7 @@
           become: false
           register: backup_transfer
 
-        - name: Wyczysc pliki tymczasowe
+        - name: Wyczyść pliki tymczasowe
           file:
             path: "{{ item }}"
             state: absent
@@ -85,7 +85,7 @@
             - /tmp/adguard_backup_{{ timestamp }}.tar.gz
 
       rescue:
-        - name: Uruchom AdGuard Home w przypadku bledu
+        - name: Uruchom AdGuard Home w przypadku błędu
           systemd:
             name: AdGuardHome
             state: started
