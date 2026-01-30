@@ -198,11 +198,7 @@
         name: "{{ share_name }}"
         path: "{{ share_path }}"
         state: present
-        full: 
-          - Administrators
-          - "{{ group_name }}"
-        deny:
-          - Everyone
+        full: "Administrators,{{ group_name }}"
         description: "Udział sieciowy dla projektów - Neumann"
 
     # ==================== INSTALACJA APLIKACJI ====================
